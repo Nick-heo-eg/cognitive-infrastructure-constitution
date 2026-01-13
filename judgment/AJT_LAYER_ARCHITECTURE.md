@@ -639,12 +639,14 @@ class JudgmentOutcome(Enum):
 
 ---
 
-## Reference Documents
+## Non-Normative Reference Materials
 
 - `BOUNDARY_GATE_MARKET_STRATEGY.md` — Market strategy (core principles)
 - `SYSTEM_SCENARIOS_FROM_REDDIT.md` — System scenarios based on Reddit cases
 - `POC_EXECUTION_READY.md` — PoC execution package (API contracts)
 - `AJT_LAYER_ARCHITECTURE.md` (this document) — Layer structure sealing
+
+**Note**: These documents are provided for empirical and contextual background only. They do not define, modify, or constrain the constitutional rules specified in this document.
 
 ---
 
