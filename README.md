@@ -247,6 +247,12 @@ Removing these constraints changes the system category.
 
 ---
 
+## Additional Resources
+
+**Explanatory notes (non-normative):** [ajt-explanatory-docs](https://github.com/Nick-heo-eg/ajt-explanatory-docs)
+
+---
+
 **Reference implementation:** [judgment-externalization](https://github.com/Nick-heo-eg/judgment-externalization)
 **Status:** LOCKED
 **Effective:** 2025-12-22
