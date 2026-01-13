@@ -17,6 +17,9 @@ AJT is not a single flow but decomposes into **a minimum of 5 layers**.
 - Execution order ❌
 - Responsibility and terminality ✅
 
+**Core Principle**:
+**Each layer answers exactly one question. No layer may answer another layer's question.**
+
 Each layer is responsible for a unique question, and state language is fixed per layer.
 
 ---
@@ -38,17 +41,19 @@ Each layer is responsible for a unique question, and state language is fixed per
 
 ### State Language (Fixed)
 ```
-Allow       — Task can execute
-Pause(Hold) — Resumable internal state (waiting for resources, synchronization)
+Allow                   — Task can execute
+Pause (Execution Hold)  — Resumable internal state (waiting for resources, synchronization)
 ```
 
+**Note**: Pause is a technical execution state unrelated to judgment, policy, or conclusion.
+
 ### Critical Constraint
-**Pause(Hold) is an internal state. The moment it is exposed as external output or API result, it is considered an error.**
+**Pause (Execution Hold) is an internal state. The moment it is exposed as external output or API result, it is considered an error.**
 
 ### Examples
 ```
 ✅ "Resources available → Allow"
-✅ "Queue waiting → Pause(Hold)"
+✅ "Queue waiting → Pause (Execution Hold)"
 ❌ "Policy violation → Pause" (This is Layer 2)
 ❌ "Insufficient evidence → Hold" (This is Layer 3)
 ```
@@ -67,13 +72,15 @@ Pause(Hold) — Resumable internal state (waiting for resources, synchronization
 
 ### State Language (Fixed)
 ```
-Stop  — Policy violation, blocked (terminal)
-Hold  — Conditions unmet, additional verification needed (non-terminal)
-Allow — Policy passed
+Stop                        — Policy violation, blocked (terminal)
+Hold (Policy Non-Terminal)  — Conditions unmet, additional verification needed (non-terminal)
+Allow                       — Policy passed
 ```
 
+**Note**: Hold is a policy condition state, not a judgment result. It indicates policy conditions are unmet, not that judgment cannot be made.
+
 ### Critical Constraint
-**Hold is not a conclusion.** It is a non-terminal state indicating conditions unmet or additional verification needed.
+**Hold (Policy Non-Terminal) is not a conclusion.** It is a non-terminal state indicating conditions unmet or additional verification needed.
 
 ### Multiple Gates Allowed
 This layer can exist in multiples:
@@ -81,7 +88,7 @@ This layer can exist in multiples:
 - External Transmission Gate (external domain check)
 - PII Detection Gate (personal information detection)
 
-Each Gate independently returns Stop/Hold/Allow.
+Each Gate independently returns Stop / Hold (Policy Non-Terminal) / Allow.
 
 ### Examples
 ```
@@ -116,9 +123,11 @@ Insufficient Evidence — Evidence lacking (do not fill with priors)
 ### Core Principle
 This layer is **the key to blocking the act of filling gaps with prior knowledge (common sense)**.
 
+**This layer never produces a judgment outcome.** It only assesses evidence sufficiency. Judgment outcomes (Stop/Allow/Indeterminate) are generated exclusively in Layer 4.
+
 When Insufficient Evidence:
 - Return to upper layer OR
-- Forward directly to Judgment Outcome Layer (terminate as Indeterminate)
+- Forward directly to Judgment Outcome Layer (Layer 4 will terminate as Indeterminate)
 
 ### Examples
 ```
@@ -140,6 +149,8 @@ When Insufficient Evidence:
 - Responsible for **termination point**
 - External exposure layer
 
+**This is the only layer allowed to emit Stop / Allow / Indeterminate.** No other layer may produce these judgment outcomes.
+
 ### State Language (Fixed)
 ```
 Stop          — Blocked (terminal)
@@ -149,6 +160,8 @@ Indeterminate — Cannot determine under current conditions (terminal)
 
 ### Definition of Indeterminate
 **Indeterminate is not a failure or hold, but a formal judgment result stating "cannot determine under current conditions."**
+
+**Indeterminate is a terminal judgment outcome, not a hold, not a failure, and not an escalation trigger.**
 
 Indeterminate trigger conditions:
 - Insufficient Evidence forwarded from Layer 3
@@ -191,6 +204,8 @@ Indeterminate trigger conditions:
 - **This layer does not change results**
 - **Allow is also logged** (passing is also recorded)
 
+**This layer cannot alter, override, or reinterpret outcomes from Layer 4.** It only records what occurred.
+
 ### Required Log Fields
 ```json
 {
@@ -223,11 +238,11 @@ Indeterminate trigger conditions:
 
 ### Rule 1: Hold propagates only to upper layers
 ```
-Process Control Layer (Pause/Hold)
+Process Control Layer (Pause / Execution Hold)
     → NOT forwarded to Safety Gate Layer
     → Internal retry or termination
 
-Safety Gate Layer (Hold)
+Safety Gate Layer (Hold / Policy Non-Terminal)
     → Forwarded to Evidence Layer (request additional evidence collection)
     → OR forwarded to Judgment Outcome Layer (terminate as Indeterminate)
 ```
@@ -428,7 +443,7 @@ def validate(data):
                          │
 ┌─────────────────────────────────────────────────────┐
 │  Layer 1: Process Control Layer                     │
-│  - Allow / Pause(Hold)                              │
+│  - Allow / Pause (Execution Hold)                   │
 │  - Time, resources, synchronization only            │
 │  - Pause is internal state (external exposure ✗)    │
 └─────────────────────────────────────────────────────┘
