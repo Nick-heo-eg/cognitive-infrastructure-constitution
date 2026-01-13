@@ -449,6 +449,8 @@ The following simplified flow demonstrates layer interaction. This example is il
          → Layer 3 (Sufficient Evidence) → Layer 4 (Stop) → Layer 5 (Log)
 ```
 
+**For detailed case studies**, see [judgment-experiment-logs/cases](https://github.com/Nick-heo-eg/judgment-experiment-logs/tree/main/cases)
+
 ---
 
 ## Non-Normative Reference Materials
