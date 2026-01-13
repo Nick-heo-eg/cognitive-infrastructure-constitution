@@ -1,146 +1,146 @@
-# AJT Layer Architecture — 판단 구조 봉인
+# AJT Layer Architecture — Judgment Structure Sealing
 
-**문서 목적**: 이 문서는 기능 구현이 아니라 판단 구조 봉인 작업이다. 이후 어떤 모델, 가드레일, 프롬프트가 바뀌어도 이 레이어 맵은 변경 대상이 아니다.
+**Document Purpose**: This document is not a feature implementation but a judgment structure sealing operation. No future changes to models, guardrails, or prompts may alter this layer map.
 
-**작업 원칙**: 혼재된 판단 언어를 레이어별로 강제 분리하고, 이후 어떤 구현이 와도 흔들리지 않는 기준면을 만든다.
+**Operating Principle**: Force-separate mixed judgment language by layer, creating an unshakeable foundation regardless of future implementations.
 
-**날짜**: 2026-01-13
-**상태**: FROZEN (Constitutional Document)
+**Date**: 2026-01-13
+**Status**: FROZEN (Constitutional Document)
 
 ---
 
-## 레이어 분해 원칙
+## Layer Decomposition Principles
 
-AJT는 하나의 흐름이 아닌 **최소 5개의 레이어**로 분해된다.
+AJT is not a single flow but decomposes into **a minimum of 5 layers**.
 
-**분해 기준**:
-- 계산 순서 ❌
-- 책임과 종결성 ✅
+**Decomposition Criteria**:
+- Execution order ❌
+- Responsibility and terminality ✅
 
-각 레이어는 고유한 질문을 담당하며, 상태 언어는 레이어별로 고정된다.
+Each layer is responsible for a unique question, and state language is fixed per layer.
 
 ---
 
 ## Layer 1: Process Control Layer
 
-### 책임
-**질문**: "지금 이 작업을 계속 실행해도 되는가?"
+### Responsibility
+**Question**: "Can this task continue executing now?"
 
-### 범위
-- 시간 (timeout, scheduling)
-- 리소스 (memory, CPU, quota)
-- 동기화 (lock, mutex, queue)
+### Scope
+- Time (timeout, scheduling)
+- Resources (memory, CPU, quota)
+- Synchronization (lock, mutex, queue)
 
-### 범위 밖 (절대 금지)
-- 판단 (judgment)
-- 결론 (conclusion)
-- 정책 (policy)
+### Out of Scope (Absolutely Forbidden)
+- Judgment
+- Conclusion
+- Policy
 
-### 상태 언어 (고정)
+### State Language (Fixed)
 ```
-Allow       — 작업 실행 가능
-Pause(Hold) — 재개 가능한 내부 상태 (리소스 대기, 동기화 대기)
-```
-
-### 중요 제약
-**Pause(Hold)는 내부 상태이며, 외부 출력이나 API 결과로 노출되는 순간 오류로 간주한다.**
-
-### 예시
-```
-✅ "리소스 사용 가능 → Allow"
-✅ "큐 대기 중 → Pause(Hold)"
-❌ "정책 위반으로 Pause" (이것은 Layer 2)
-❌ "증거 부족으로 Hold" (이것은 Layer 3)
+Allow       — Task can execute
+Pause(Hold) — Resumable internal state (waiting for resources, synchronization)
 ```
 
-### 구현 매핑
+### Critical Constraint
+**Pause(Hold) is an internal state. The moment it is exposed as external output or API result, it is considered an error.**
+
+### Examples
+```
+✅ "Resources available → Allow"
+✅ "Queue waiting → Pause(Hold)"
+❌ "Policy violation → Pause" (This is Layer 2)
+❌ "Insufficient evidence → Hold" (This is Layer 3)
+```
+
+### Implementation Mapping
 - OS scheduler
 - Database connection pool
 - Rate limiter
-- Circuit breaker (리소스 관점만)
+- Circuit breaker (resource perspective only)
 
 ---
 
 ## Layer 2: Safety / Policy Gate Layer
 
-### 책임
-**질문**: "이 요청을 통과시켜도 되는가?"
+### Responsibility
+**Question**: "Can this request pass through?"
 
-### 범위
-- 정책 (policy rules)
-- 규제 (regulatory compliance)
-- 금지 조건 (forbidden patterns)
+### Scope
+- Policy rules
+- Regulatory compliance
+- Forbidden patterns
 
-### 상태 언어 (고정)
+### State Language (Fixed)
 ```
-Stop  — 정책 위반, 차단 (종결)
-Hold  — 조건 미충족, 추가 검증 필요 (비종결)
-Allow — 정책 통과
-```
-
-### 중요 제약
-**Hold는 결론이 아니다.** 조건 미충족 또는 추가 검증 필요를 의미하는 비종결 상태이다.
-
-### 다중 Gate 허용
-이 레이어는 다중으로 존재할 수 있다:
-- Content Policy Gate (욕설, 차별 표현)
-- External Transmission Gate (외부 도메인 체크)
-- PII Detection Gate (개인정보 탐지)
-
-각 Gate는 독립적으로 Stop/Hold/Allow를 반환한다.
-
-### 예시
-```
-✅ "외부 도메인 발견 → Stop"
-✅ "PII 탐지됨, 마스킹 대기 → Hold"
-✅ "내부 이메일만 포함 → Allow"
-❌ "증거 부족 → Hold" (이것은 Layer 3)
-❌ "판단 불가 → Hold" (이것은 Layer 4의 Indeterminate)
+Stop  — Policy violation, blocked (terminal)
+Hold  — Conditions unmet, additional verification needed (non-terminal)
+Allow — Policy passed
 ```
 
-### 구현 매핑
+### Critical Constraint
+**Hold is not a conclusion.** It is a non-terminal state indicating conditions unmet or additional verification needed.
+
+### Multiple Gates Allowed
+This layer can exist in multiples:
+- Content Policy Gate (profanity, discriminatory expressions)
+- External Transmission Gate (external domain check)
+- PII Detection Gate (personal information detection)
+
+Each Gate independently returns Stop/Hold/Allow.
+
+### Examples
+```
+✅ "External domain detected → Stop"
+✅ "PII detected, awaiting masking → Hold"
+✅ "Internal email only → Allow"
+❌ "Insufficient evidence → Hold" (This is Layer 3)
+❌ "Cannot determine → Hold" (This is Layer 4's Indeterminate)
+```
+
+### Implementation Mapping
 - Guardrail systems
 - Policy engines
 - Regex-based filters
-- ML-based classifiers (policy 목적만)
+- ML-based classifiers (policy purposes only)
 
 ---
 
 ## Layer 3: Evidence / Observation Layer
 
-### 책임
-**질문**: "이 판단에 필요한 관측 증거가 존재하는가?"
+### Responsibility
+**Question**: "Does necessary observational evidence exist for this judgment?"
 
-### 범위
-- 관측 가능한 증거의 존재 여부
-- 증거의 충분성 (sufficiency)
-- 증거의 신뢰성 (reliability)
+### Scope
+- Existence of observable evidence
+- Evidence sufficiency
+- Evidence reliability
 
-### 범위 밖 (절대 금지)
-**Prior(상식)로 빈칸을 메우는 행위**
+### Out of Scope (Absolutely Forbidden)
+**Filling gaps with prior knowledge (common sense)**
 
-### 상태 언어 (고정)
+### State Language (Fixed)
 ```
-Sufficient Evidence   — 판단에 필요한 증거 확보
-Insufficient Evidence — 증거 부족 (prior로 채우지 않음)
-```
-
-### 핵심 원칙
-이 레이어는 **prior(상식)로 빈칸을 메우는 행위를 차단하는 핵심**이다.
-
-Insufficient Evidence일 경우:
-- 상위 레이어로 되돌리거나
-- 바로 Judgment Outcome Layer로 전달 (Indeterminate로 종결)
-
-### 예시
-```
-✅ "이메일 수신자 도메인 확인됨 → Sufficient Evidence"
-✅ "첨부파일 메타데이터 없음 → Insufficient Evidence"
-❌ "첨부파일이 보통 안전하니까 Allow" (prior 사용 금지)
-❌ "이전에 비슷한 케이스가 괜찮았으니 Allow" (prior 사용 금지)
+Sufficient Evidence   — Evidence secured for judgment
+Insufficient Evidence — Evidence lacking (do not fill with priors)
 ```
 
-### 구현 매핑
+### Core Principle
+This layer is **the key to blocking the act of filling gaps with prior knowledge (common sense)**.
+
+When Insufficient Evidence:
+- Return to upper layer OR
+- Forward directly to Judgment Outcome Layer (terminate as Indeterminate)
+
+### Examples
+```
+✅ "Email recipient domain confirmed → Sufficient Evidence"
+✅ "Attachment metadata absent → Insufficient Evidence"
+❌ "Attachments are usually safe, so Allow" (prior usage forbidden)
+❌ "Similar previous cases were okay, so Allow" (prior usage forbidden)
+```
+
+### Implementation Mapping
 - Feature extraction
 - Metadata validation
 - Observable signals collection
@@ -150,48 +150,48 @@ Insufficient Evidence일 경우:
 
 ## Layer 4: Judgment Outcome Layer
 
-### 책임
-**질문**: "최종 판단 결과는 무엇인가?"
+### Responsibility
+**Question**: "What is the final judgment result?"
 
-### 특성
-- AJT의 **공식 결과 레이어**
-- **종결 지점** 담당
-- 외부 노출 레이어
+### Characteristics
+- AJT's **official result layer**
+- Responsible for **termination point**
+- External exposure layer
 
-### 상태 언어 (고정)
+### State Language (Fixed)
 ```
-Stop          — 차단 (종결)
-Allow         — 통과 (종결)
-Indeterminate — 현재 조건에서 결정 불가 (종결)
-```
-
-### Indeterminate의 정의
-**Indeterminate는 실패나 보류가 아니라 "현재 조건에서 결정 불가"라는 정식 판단 결과이다.**
-
-Indeterminate 발생 조건:
-- Layer 3에서 Insufficient Evidence 전달
-- 다중 Gate에서 상충되는 결과 (Gate A: Allow, Gate B: Stop)
-- 판단 기준 자체가 정의되지 않음
-
-### 중요 제약
-**이 레이어 이후에는 자동 재시도나 암묵적 Allow가 절대 발생하지 않는다.**
-
-### 예시
-```
-✅ "외부 도메인 + 정책 위반 → Stop"
-✅ "내부 이메일 + 정책 통과 → Allow"
-✅ "수신자 도메인 확인 불가 → Indeterminate"
-❌ "Indeterminate이니까 일단 Allow" (금지)
-❌ "Indeterminate이니까 재시도" (금지)
+Stop          — Blocked (terminal)
+Allow         — Passed (terminal)
+Indeterminate — Cannot determine under current conditions (terminal)
 ```
 
-### 외부 노출 규칙
-**외부 API, UI, 사용자에게 노출되는 상태 언어는 이 레이어의 세 가지로 제한된다:**
+### Definition of Indeterminate
+**Indeterminate is not a failure or hold, but a formal judgment result stating "cannot determine under current conditions."**
+
+Indeterminate trigger conditions:
+- Insufficient Evidence forwarded from Layer 3
+- Conflicting results from multiple Gates (Gate A: Allow, Gate B: Stop)
+- Judgment criteria themselves undefined
+
+### Critical Constraint
+**After this layer, automatic retry or implicit Allow must never occur.**
+
+### Examples
+```
+✅ "External domain + policy violation → Stop"
+✅ "Internal email + policy passed → Allow"
+✅ "Recipient domain cannot be confirmed → Indeterminate"
+❌ "It's Indeterminate, so Allow for now" (forbidden)
+❌ "It's Indeterminate, so retry" (forbidden)
+```
+
+### External Exposure Rule
+**State language exposed to external APIs, UIs, and users is limited to these three from this layer:**
 - Stop
 - Allow
 - Indeterminate
 
-### 구현 매핑
+### Implementation Mapping
 - Final decision API endpoint
 - User-facing status code
 - Audit log primary status
@@ -200,21 +200,21 @@ Indeterminate 발생 조건:
 
 ## Layer 5: Accountability / Trace Layer
 
-### 책임
-**질문**: "왜 이런 결론이 나왔는가?"
+### Responsibility
+**Question**: "Why did this conclusion occur?"
 
-### 범위
-- 로그 (log)
-- 트레이스 (trace)
-- 증거 체인 (evidence chain)
-- 감사 기록 (audit trail)
+### Scope
+- Logs
+- Traces
+- Evidence chains
+- Audit trails
 
-### 특성
-- **모든 Judgment Outcome은 이 레이어로 의무적으로 연결된다**
-- **이 레이어는 결과를 바꾸지 않는다**
-- **Allow도 로그 대상이다** (통과한 것도 기록)
+### Characteristics
+- **All Judgment Outcomes must connect to this layer mandatorily**
+- **This layer does not change results**
+- **Allow is also logged** (passing is also recorded)
 
-### 로그 필수 필드
+### Required Log Fields
 ```json
 {
   "event_id": "evt_20260113_...",
@@ -246,16 +246,16 @@ Indeterminate 발생 조건:
 }
 ```
 
-### 예시
+### Examples
 ```
-✅ Allow → 로그 (정상 통과도 기록)
-✅ Stop → 로그 + 차단 사유
-✅ Indeterminate → 로그 + 증거 부족 상세
-❌ 로그 없이 Allow (금지)
-❌ "로그 실패했으니 일단 Allow" (금지)
+✅ Allow → Log (normal passage also recorded)
+✅ Stop → Log + blocking reason
+✅ Indeterminate → Log + evidence insufficiency details
+❌ Allow without log (forbidden)
+❌ "Log failed, so Allow for now" (forbidden)
 ```
 
-### 구현 매핑
+### Implementation Mapping
 - PostgreSQL append-only log
 - AJT Log table (immutable)
 - OpenTelemetry traces
@@ -263,20 +263,20 @@ Indeterminate 발생 조건:
 
 ---
 
-## 레이어 간 상태 전파 규칙
+## Inter-Layer State Propagation Rules
 
-### 규칙 1: Hold는 상위 레이어로만 전파
+### Rule 1: Hold propagates only to upper layers
 ```
 Process Control Layer (Pause/Hold)
-    → Safety Gate Layer로 전달되지 않음
-    → 내부 재시도 또는 종료
+    → NOT forwarded to Safety Gate Layer
+    → Internal retry or termination
 
 Safety Gate Layer (Hold)
-    → Evidence Layer로 전달 (증거 추가 수집 요청)
-    → 또는 Judgment Outcome Layer로 전달 (Indeterminate로 종결)
+    → Forwarded to Evidence Layer (request additional evidence collection)
+    → OR forwarded to Judgment Outcome Layer (terminate as Indeterminate)
 ```
 
-### 규칙 2: Indeterminate는 Judgment Outcome Layer에서만 생성
+### Rule 2: Indeterminate generated only in Judgment Outcome Layer
 ```
 Evidence Layer (Insufficient Evidence)
     → Judgment Outcome Layer (Indeterminate)
@@ -284,42 +284,42 @@ Evidence Layer (Insufficient Evidence)
 Safety Gate Layer (Hold + timeout)
     → Judgment Outcome Layer (Indeterminate)
 
-❌ Process Control Layer에서 Indeterminate 생성 금지
-❌ Safety Gate Layer에서 Indeterminate 반환 금지
+❌ Indeterminate generation forbidden in Process Control Layer
+❌ Indeterminate return forbidden in Safety Gate Layer
 ```
 
-### 규칙 3: 모든 종결 상태는 Layer 5로 의무 전파
+### Rule 3: All terminal states must propagate to Layer 5
 ```
 Judgment Outcome Layer (Stop/Allow/Indeterminate)
     → MUST propagate to Accountability Layer
-    → 로그 실패 시 전체 작업 실패로 처리
+    → If logging fails, treat entire operation as failed
 ```
 
 ---
 
-## 구현 제약 (Implementation Constraints)
+## Implementation Constraints
 
-### 제약 1: 단어 사용 제한
+### Constraint 1: Word Usage Restrictions
 ```
-Hold         — Layer 1, Layer 2에서만 사용
-             — Layer 4에서 절대 사용 금지
+Hold         — Use only in Layer 1, Layer 2
+             — Absolutely forbidden in Layer 4
 
-Indeterminate — Layer 4에서만 사용
-              — Layer 1, 2, 3에서 절대 사용 금지
+Indeterminate — Use only in Layer 4
+              — Absolutely forbidden in Layer 1, 2, 3
 
-Pause        — Layer 1에서만 사용
-             — 외부 API 노출 금지
+Pause        — Use only in Layer 1
+             — Forbidden to expose to external API
 ```
 
-### 제약 2: 외부 노출 제한
-**외부 API, UI, 사용자에게 노출되는 상태 언어:**
+### Constraint 2: External Exposure Restrictions
+**State language exposed to external APIs, UIs, and users:**
 ```
 Stop
 Allow
 Indeterminate
 ```
 
-**절대 노출 금지:**
+**Absolutely forbidden to expose:**
 ```
 Hold
 Pause
@@ -328,200 +328,200 @@ Waiting
 Processing
 ```
 
-### 제약 3: 암묵적 Allow 금지
+### Constraint 3: Implicit Allow Forbidden
 ```
-❌ Indeterminate → 자동 Allow
-❌ Hold + timeout → 자동 Allow
-❌ Evidence Insufficient → 자동 Allow
-❌ 로그 실패 → 자동 Allow
-```
-
-### 제약 4: Prior 사용 금지
-```
-❌ "보통 이런 경우는 안전하니까..."
-❌ "이전 케이스가 통과했으니까..."
-❌ "상식적으로 판단하면..."
-❌ "일반적으로는..."
+❌ Indeterminate → automatic Allow
+❌ Hold + timeout → automatic Allow
+❌ Evidence Insufficient → automatic Allow
+❌ Log failure → automatic Allow
 ```
 
-Evidence Layer에서 Insufficient Evidence일 경우:
-- Indeterminate로 종결
-- 또는 사람에게 판단 위임
+### Constraint 4: Prior Usage Forbidden
+```
+❌ "Usually in such cases it's safe..."
+❌ "Previous cases passed, so..."
+❌ "If we judge with common sense..."
+❌ "Generally speaking..."
+```
+
+When Insufficient Evidence in Evidence Layer:
+- Terminate as Indeterminate
+- OR delegate judgment to human
 
 ---
 
-## 머지 정책 (Merge Policy)
+## Merge Policy
 
-### 필수 요구사항
-**모든 코드, 레포, 실험은 "어느 레이어의 언어를 쓰는가"를 명시하지 않으면 머지하지 않는다.**
+### Mandatory Requirements
+**All code, repos, and experiments must specify "which layer's language is used" or will not be merged.**
 
-### 코드 주석 예시
+### Code Comment Examples
 ```python
 # Layer 2: Safety / Policy Gate Layer
 # State language: Stop / Hold / Allow
 def check_external_domain(recipient: str) -> GateResult:
     if is_external(recipient):
-        return GateResult.STOP  # ✅ Layer 2 언어
+        return GateResult.STOP  # ✅ Layer 2 language
     return GateResult.ALLOW
 
 # Layer 4: Judgment Outcome Layer
 # State language: Stop / Allow / Indeterminate
 def finalize_judgment(gate_results: List[GateResult]) -> JudgmentOutcome:
     if any(r == GateResult.STOP for r in gate_results):
-        return JudgmentOutcome.STOP  # ✅ Layer 4 언어
+        return JudgmentOutcome.STOP  # ✅ Layer 4 language
     if any(r == GateResult.HOLD for r in gate_results):
-        return JudgmentOutcome.INDETERMINATE  # ✅ Hold → Indeterminate 변환
+        return JudgmentOutcome.INDETERMINATE  # ✅ Hold → Indeterminate conversion
     return JudgmentOutcome.ALLOW
 ```
 
-### 금지 예시
+### Forbidden Examples
 ```python
-# ❌ 레이어 명시 없음
+# ❌ No layer specified
 def process_request(data):
     if check_policy(data):
-        return "OK"  # ❌ 상태 언어 불명확
+        return "OK"  # ❌ State language unclear
     return "NG"
 
-# ❌ 레이어 혼재
+# ❌ Layer mixing
 def validate(data):
-    # Layer 2 언어와 Layer 4 언어 혼재
+    # Layer 2 language and Layer 4 language mixed
     if data.is_safe:
         return "Allow"
     if data.need_review:
-        return "Indeterminate"  # ❌ Layer 2에서 Indeterminate 사용 금지
+        return "Indeterminate"  # ❌ Forbidden to use Indeterminate in Layer 2
     return "Stop"
 ```
 
-### Pull Request 체크리스트
+### Pull Request Checklist
 ```
-- [ ] 코드에 레이어 명시 (주석 또는 타입)
-- [ ] 상태 언어가 해당 레이어의 고정 언어와 일치
-- [ ] Hold/Indeterminate 사용 위치 검증
-- [ ] 외부 노출 상태가 Layer 4 언어만 사용
-- [ ] Prior 사용 없음 (Evidence Layer 체크)
-- [ ] 암묵적 Allow 없음 (Indeterminate 처리 체크)
+- [ ] Layer specified in code (comment or type)
+- [ ] State language matches layer's fixed language
+- [ ] Hold/Indeterminate usage location verified
+- [ ] External exposed states use only Layer 4 language
+- [ ] No prior usage (Evidence Layer check)
+- [ ] No implicit Allow (Indeterminate handling check)
 ```
 
 ---
 
-## 레이어 맵 불변성 (Immutability)
+## Layer Map Immutability
 
-### 변경 불가 항목
+### Unchangeable Items
 ```
 ✅ FROZEN (Constitutional):
-- 5개 레이어 구조
-- 각 레이어의 질문 정의
-- 상태 언어 (Stop/Allow/Hold/Indeterminate/Pause)
-- 레이어 간 전파 규칙
-- Hold/Indeterminate 사용 제약
+- 5-layer structure
+- Each layer's question definition
+- State language (Stop/Allow/Hold/Indeterminate/Pause)
+- Inter-layer propagation rules
+- Hold/Indeterminate usage constraints
 ```
 
-### 변경 가능 항목
+### Changeable Items
 ```
-✅ 구현 자유도:
-- 프로그래밍 언어 선택
-- 프레임워크 선택
-- 데이터베이스 선택
-- 모델 선택 (LLM, rule-based, ML)
-- 최적화 기법
+✅ Implementation freedom:
+- Programming language selection
+- Framework selection
+- Database selection
+- Model selection (LLM, rule-based, ML)
+- Optimization techniques
 ```
 
-### 변경 불가 이유
-**이 문서는 판단 구조 봉인 작업이며, 이후 어떤 모델, 가드레일, 프롬프트가 바뀌어도 이 레이어 맵은 변경 대상이 아니다.**
+### Reason for Unchangeability
+**This document is a judgment structure sealing operation. No future changes to models, guardrails, or prompts may alter this layer map.**
 
 ---
 
-## 레이어 다이어그램
+## Layer Diagram
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │  Layer 5: Accountability / Trace Layer              │
-│  - 로그, 트레이스, 감사 기록                         │
-│  - 결과 변경 불가, 기록만                            │
-│  - Allow도 로그 대상                                 │
+│  - Logs, traces, audit records                      │
+│  - Cannot change results, only records              │
+│  - Allow is also logged                             │
 └─────────────────────────────────────────────────────┘
                          ▲
-                         │ (모든 판단 결과 의무 전파)
+                         │ (mandatory propagation of all judgment results)
                          │
 ┌─────────────────────────────────────────────────────┐
 │  Layer 4: Judgment Outcome Layer                    │
-│  - 최종 판단: Stop / Allow / Indeterminate          │
-│  - 외부 노출 레이어                                  │
-│  - 종결 지점 (재시도 금지)                           │
+│  - Final judgment: Stop / Allow / Indeterminate     │
+│  - External exposure layer                          │
+│  - Termination point (retry forbidden)              │
 └─────────────────────────────────────────────────────┘
                          ▲
-                         │ (종결 상태 전파)
+                         │ (terminal state propagation)
                          │
 ┌─────────────────────────────────────────────────────┐
 │  Layer 3: Evidence / Observation Layer              │
 │  - Sufficient Evidence / Insufficient Evidence      │
-│  - Prior로 빈칸 메우기 금지                          │
-│  - Insufficient → Indeterminate로 전달               │
+│  - Forbidden to fill gaps with prior knowledge      │
+│  - Insufficient → forward as Indeterminate          │
 └─────────────────────────────────────────────────────┘
                          ▲
-                         │ (증거 수집 결과)
+                         │ (evidence collection results)
                          │
 ┌─────────────────────────────────────────────────────┐
-│  Layer 2: Safety / Policy Gate Layer (다중 가능)    │
+│  Layer 2: Safety / Policy Gate Layer (multi OK)     │
 │  - Stop / Hold / Allow                              │
-│  - 정책, 규제, 금지 조건                             │
-│  - Hold는 비종결 상태 (추가 검증 필요)               │
+│  - Policy, regulation, forbidden conditions         │
+│  - Hold is non-terminal (additional verification)   │
 └─────────────────────────────────────────────────────┘
                          ▲
-                         │ (정책 체크 요청)
+                         │ (policy check request)
                          │
 ┌─────────────────────────────────────────────────────┐
 │  Layer 1: Process Control Layer                     │
 │  - Allow / Pause(Hold)                              │
-│  - 시간, 리소스, 동기화만                            │
-│  - Pause는 내부 상태 (외부 노출 금지)                │
+│  - Time, resources, synchronization only            │
+│  - Pause is internal state (external exposure ✗)    │
 └─────────────────────────────────────────────────────┘
                          ▲
-                         │ (작업 요청)
+                         │ (task request)
                          │
-                   [ 외부 요청 ]
+                   [ External Request ]
 ```
 
 ---
 
-## 예시: 외부 이메일 전송 판단 흐름
+## Example: External Email Transmission Judgment Flow
 
 ```
-[사용자] 이메일 작성 완료, Send 버튼 클릭
+[User] Email composition complete, Send button clicked
     ↓
 ┌─────────────────────────────────────────────────────┐
 │ Layer 1: Process Control                            │
-│ - 큐 확인: 대기열 없음 → Allow                       │
-│ - 리소스: CPU/메모리 충분 → Allow                    │
-│ 결과: Allow                                         │
+│ - Queue check: no queue → Allow                     │
+│ - Resources: CPU/memory sufficient → Allow          │
+│ Result: Allow                                       │
 └─────────────────────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────────────────────┐
 │ Layer 2: Safety Gate (External Transmission)        │
-│ - 수신자: clerk@court.gov → 외부 도메인             │
-│ 결과: Stop                                          │
+│ - Recipient: clerk@court.gov → external domain      │
+│ Result: Stop                                        │
 └─────────────────────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────────────────────┐
 │ Layer 3: Evidence                                   │
-│ - 도메인 확인: 성공                                  │
-│ - 첨부파일 메타데이터: 존재                          │
-│ 결과: Sufficient Evidence                           │
+│ - Domain check: success                             │
+│ - Attachment metadata: exists                       │
+│ Result: Sufficient Evidence                         │
 └─────────────────────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────────────────────┐
 │ Layer 4: Judgment Outcome                           │
-│ - Gate 결과: Stop                                   │
+│ - Gate result: Stop                                 │
 │ - Evidence: Sufficient                              │
-│ 최종 판단: Stop                                     │
-│ → STOP Preview Window 표시                          │
-│ → 사용자 승인 대기                                   │
+│ Final judgment: Stop                                │
+│ → Display STOP Preview Window                       │
+│ → Wait for user approval                            │
 └─────────────────────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────────────────────┐
 │ Layer 5: Accountability                             │
-│ - Event ID 생성                                     │
-│ - AJT Log 기록:                                     │
+│ - Generate Event ID                                 │
+│ - Record AJT Log:                                   │
 │   {                                                 │
 │     "judgment_outcome": "Stop",                     │
 │     "gate": "External Transmission",                │
@@ -533,10 +533,10 @@ def validate(data):
 
 ---
 
-## 예시: Indeterminate 케이스
+## Example: Indeterminate Case
 
 ```
-[사용자] 이메일 작성, 수신자 주소 오타
+[User] Email composition, typo in recipient address
     ↓
 ┌─────────────────────────────────────────────────────┐
 │ Layer 1: Process Control → Allow                    │
@@ -544,30 +544,30 @@ def validate(data):
     ↓
 ┌─────────────────────────────────────────────────────┐
 │ Layer 2: Safety Gate (External Transmission)        │
-│ - 수신자: clerk@cort.gv (오타)                      │
-│ - DNS 조회 실패                                      │
-│ 결과: Hold (도메인 확인 불가)                        │
+│ - Recipient: clerk@cort.gv (typo)                   │
+│ - DNS lookup failed                                 │
+│ Result: Hold (domain cannot be confirmed)           │
 └─────────────────────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────────────────────┐
 │ Layer 3: Evidence                                   │
-│ - 도메인 정보: 없음                                  │
-│ 결과: Insufficient Evidence                         │
+│ - Domain information: none                          │
+│ Result: Insufficient Evidence                       │
 └─────────────────────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────────────────────┐
 │ Layer 4: Judgment Outcome                           │
 │ - Gate: Hold                                        │
 │ - Evidence: Insufficient                            │
-│ 최종 판단: Indeterminate                            │
-│ → 사용자에게 메시지:                                 │
-│   "수신자 주소를 확인할 수 없습니다.                 │
-│    주소를 수정하거나 관리자에게 문의하세요."         │
+│ Final judgment: Indeterminate                       │
+│ → Message to user:                                  │
+│   "Cannot verify recipient address.                 │
+│    Please correct address or contact administrator."│
 └─────────────────────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────────────────────┐
 │ Layer 5: Accountability                             │
-│ - AJT Log 기록:                                     │
+│ - Record AJT Log:                                   │
 │   {                                                 │
 │     "judgment_outcome": "Indeterminate",            │
 │     "reason": "DNS resolution failed",              │
@@ -578,11 +578,11 @@ def validate(data):
 
 ---
 
-## 구현 우선순위
+## Implementation Priority
 
-### Phase 1: 레이어 인터페이스 정의 (1주)
+### Phase 1: Layer Interface Definition (1 week)
 ```python
-# 각 레이어의 타입 정의
+# Type definitions for each layer
 class ProcessControlResult(Enum):
     ALLOW = "allow"
     PAUSE = "pause"
@@ -602,52 +602,52 @@ class JudgmentOutcome(Enum):
     INDETERMINATE = "indeterminate"
 ```
 
-### Phase 2: Layer 4 + Layer 5 구현 (1주)
-- Judgment Outcome Layer 로직
+### Phase 2: Layer 4 + Layer 5 Implementation (1 week)
+- Judgment Outcome Layer logic
 - Accountability Layer (AJT Log)
-- 외부 API 엔드포인트 (`/v1/events`)
+- External API endpoint (`/v1/events`)
 
-### Phase 3: Layer 2 + Layer 3 구현 (1주)
+### Phase 3: Layer 2 + Layer 3 Implementation (1 week)
 - External Transmission Gate
 - Evidence collection
-- Gate → Judgment 연결
+- Gate → Judgment connection
 
-### Phase 4: Layer 1 구현 (1주)
+### Phase 4: Layer 1 Implementation (1 week)
 - Process control (rate limiting, queue)
-- Layer 1 → Layer 2 연결
+- Layer 1 → Layer 2 connection
 
 ---
 
-## 검증 체크리스트
+## Verification Checklist
 
-### 레이어 분리 검증
-- [ ] 각 레이어가 자신의 질문만 답변
-- [ ] Hold가 Layer 1, 2에서만 사용됨
-- [ ] Indeterminate가 Layer 4에서만 생성됨
-- [ ] 외부 API가 Layer 4 언어만 노출
+### Layer Separation Verification
+- [ ] Each layer only answers its own question
+- [ ] Hold used only in Layer 1, 2
+- [ ] Indeterminate generated only in Layer 4
+- [ ] External API exposes only Layer 4 language
 
-### 금지 항목 검증
-- [ ] Prior 사용 없음 (Evidence Layer)
-- [ ] 암묵적 Allow 없음 (Indeterminate 처리)
-- [ ] 자동 재시도 없음 (Judgment 이후)
-- [ ] Pause 외부 노출 없음
+### Forbidden Items Verification
+- [ ] No prior usage (Evidence Layer)
+- [ ] No implicit Allow (Indeterminate handling)
+- [ ] No automatic retry (after Judgment)
+- [ ] No external Pause exposure
 
-### 로그 검증
-- [ ] 모든 Judgment Outcome이 로그됨
-- [ ] Allow도 로그됨
-- [ ] 로그 실패 시 작업 실패 처리
-
----
-
-## 참조 문서
-
-- `BOUNDARY_GATE_MARKET_STRATEGY.md` — 시장 전략 (핵심 원칙)
-- `SYSTEM_SCENARIOS_FROM_REDDIT.md` — Reddit 사례 기반 시스템 시나리오
-- `POC_EXECUTION_READY.md` — PoC 실행 패키지 (API 계약)
-- `AJT_LAYER_ARCHITECTURE.md` (이 문서) — 레이어 구조 봉인
+### Log Verification
+- [ ] All Judgment Outcomes are logged
+- [ ] Allow is also logged
+- [ ] Log failure treated as operation failure
 
 ---
 
-**이 문서는 Constitutional Document이며, 이후 모든 구현은 이 레이어 맵을 따라야 한다.**
+## Reference Documents
 
-**변경 금지. 추가 설명만 허용.**
+- `BOUNDARY_GATE_MARKET_STRATEGY.md` — Market strategy (core principles)
+- `SYSTEM_SCENARIOS_FROM_REDDIT.md` — System scenarios based on Reddit cases
+- `POC_EXECUTION_READY.md` — PoC execution package (API contracts)
+- `AJT_LAYER_ARCHITECTURE.md` (this document) — Layer structure sealing
+
+---
+
+**This document is a Constitutional Document. All future implementations must follow this layer map.**
+
+**Change forbidden. Additional explanation only permitted.**
