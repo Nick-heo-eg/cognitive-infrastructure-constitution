@@ -53,12 +53,6 @@ Pause(Hold) — Resumable internal state (waiting for resources, synchronization
 ❌ "Insufficient evidence → Hold" (This is Layer 3)
 ```
 
-### Implementation Mapping
-- OS scheduler
-- Database connection pool
-- Rate limiter
-- Circuit breaker (resource perspective only)
-
 ---
 
 ## Layer 2: Safety / Policy Gate Layer
@@ -98,12 +92,6 @@ Each Gate independently returns Stop/Hold/Allow.
 ❌ "Cannot determine → Hold" (This is Layer 4's Indeterminate)
 ```
 
-### Implementation Mapping
-- Guardrail systems
-- Policy engines
-- Regex-based filters
-- ML-based classifiers (policy purposes only)
-
 ---
 
 ## Layer 3: Evidence / Observation Layer
@@ -134,17 +122,11 @@ When Insufficient Evidence:
 
 ### Examples
 ```
-✅ "Email recipient domain confirmed → Sufficient Evidence"
-✅ "Attachment metadata absent → Insufficient Evidence"
-❌ "Attachments are usually safe, so Allow" (prior usage forbidden)
-❌ "Similar previous cases were okay, so Allow" (prior usage forbidden)
+✅ "Domain confirmed → Sufficient Evidence"
+✅ "Metadata absent → Insufficient Evidence"
+❌ "Usually safe, so Allow" (prior usage forbidden)
+❌ "Previous cases okay, so Allow" (prior usage forbidden)
 ```
-
-### Implementation Mapping
-- Feature extraction
-- Metadata validation
-- Observable signals collection
-- Confidence scoring (not decision making)
 
 ---
 
@@ -180,7 +162,7 @@ Indeterminate trigger conditions:
 ```
 ✅ "External domain + policy violation → Stop"
 ✅ "Internal email + policy passed → Allow"
-✅ "Recipient domain cannot be confirmed → Indeterminate"
+✅ "Domain cannot be confirmed → Indeterminate"
 ❌ "It's Indeterminate, so Allow for now" (forbidden)
 ❌ "It's Indeterminate, so retry" (forbidden)
 ```
@@ -190,11 +172,6 @@ Indeterminate trigger conditions:
 - Stop
 - Allow
 - Indeterminate
-
-### Implementation Mapping
-- Final decision API endpoint
-- User-facing status code
-- Audit log primary status
 
 ---
 
@@ -217,29 +194,14 @@ Indeterminate trigger conditions:
 ### Required Log Fields
 ```json
 {
-  "event_id": "evt_20260113_...",
+  "event_id": "evt_...",
   "judgment_outcome": "Stop | Allow | Indeterminate",
   "timestamp": "ISO8601",
   "layers_executed": [
-    {
-      "layer": "Process Control Layer",
-      "result": "Allow",
-      "latency_ms": 5
-    },
-    {
-      "layer": "Safety Gate Layer",
-      "gate": "External Transmission Gate",
-      "result": "Stop",
-      "evidence": ["recipient_domain=court.gov"]
-    },
-    {
-      "layer": "Evidence Layer",
-      "result": "Sufficient Evidence"
-    },
-    {
-      "layer": "Judgment Outcome Layer",
-      "result": "Stop"
-    }
+    {"layer": "Process Control Layer", "result": "Allow"},
+    {"layer": "Safety Gate Layer", "result": "Stop"},
+    {"layer": "Evidence Layer", "result": "Sufficient Evidence"},
+    {"layer": "Judgment Outcome Layer", "result": "Stop"}
   ],
   "approver_identity": "user@example.com (if human override)",
   "final_action": "blocked | sent | deferred"
@@ -254,12 +216,6 @@ Indeterminate trigger conditions:
 ❌ Allow without log (forbidden)
 ❌ "Log failed, so Allow for now" (forbidden)
 ```
-
-### Implementation Mapping
-- PostgreSQL append-only log
-- AJT Log table (immutable)
-- OpenTelemetry traces
-- Audit compliance reports
 
 ---
 
@@ -484,165 +440,21 @@ def validate(data):
 
 ---
 
-## Example: External Email Transmission Judgment Flow
+## Illustrative Example (Non-Normative)
+
+The following simplified flow demonstrates layer interaction. This example is illustrative only and does not define or constrain the constitutional rules.
 
 ```
-[User] Email composition complete, Send button clicked
-    ↓
-┌─────────────────────────────────────────────────────┐
-│ Layer 1: Process Control                            │
-│ - Queue check: no queue → Allow                     │
-│ - Resources: CPU/memory sufficient → Allow          │
-│ Result: Allow                                       │
-└─────────────────────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────────────────────┐
-│ Layer 2: Safety Gate (External Transmission)        │
-│ - Recipient: clerk@court.gov → external domain      │
-│ Result: Stop                                        │
-└─────────────────────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────────────────────┐
-│ Layer 3: Evidence                                   │
-│ - Domain check: success                             │
-│ - Attachment metadata: exists                       │
-│ Result: Sufficient Evidence                         │
-└─────────────────────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────────────────────┐
-│ Layer 4: Judgment Outcome                           │
-│ - Gate result: Stop                                 │
-│ - Evidence: Sufficient                              │
-│ Final judgment: Stop                                │
-│ → Display STOP Preview Window                       │
-│ → Wait for user approval                            │
-└─────────────────────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────────────────────┐
-│ Layer 5: Accountability                             │
-│ - Generate Event ID                                 │
-│ - Record AJT Log:                                   │
-│   {                                                 │
-│     "judgment_outcome": "Stop",                     │
-│     "gate": "External Transmission",                │
-│     "evidence": "recipient_domain=court.gov",       │
-│     "user_action": "pending"                        │
-│   }                                                 │
-└─────────────────────────────────────────────────────┘
+[Request] → Layer 1 (Allow) → Layer 2 (Stop: external domain)
+         → Layer 3 (Sufficient Evidence) → Layer 4 (Stop) → Layer 5 (Log)
 ```
-
----
-
-## Example: Indeterminate Case
-
-```
-[User] Email composition, typo in recipient address
-    ↓
-┌─────────────────────────────────────────────────────┐
-│ Layer 1: Process Control → Allow                    │
-└─────────────────────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────────────────────┐
-│ Layer 2: Safety Gate (External Transmission)        │
-│ - Recipient: clerk@cort.gv (typo)                   │
-│ - DNS lookup failed                                 │
-│ Result: Hold (domain cannot be confirmed)           │
-└─────────────────────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────────────────────┐
-│ Layer 3: Evidence                                   │
-│ - Domain information: none                          │
-│ Result: Insufficient Evidence                       │
-└─────────────────────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────────────────────┐
-│ Layer 4: Judgment Outcome                           │
-│ - Gate: Hold                                        │
-│ - Evidence: Insufficient                            │
-│ Final judgment: Indeterminate                       │
-│ → Message to user:                                  │
-│   "Cannot verify recipient address.                 │
-│    Please correct address or contact administrator."│
-└─────────────────────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────────────────────┐
-│ Layer 5: Accountability                             │
-│ - Record AJT Log:                                   │
-│   {                                                 │
-│     "judgment_outcome": "Indeterminate",            │
-│     "reason": "DNS resolution failed",              │
-│     "user_input": "clerk@cort.gv"                   │
-│   }                                                 │
-└─────────────────────────────────────────────────────┘
-```
-
----
-
-## Implementation Priority
-
-### Phase 1: Layer Interface Definition (1 week)
-```python
-# Type definitions for each layer
-class ProcessControlResult(Enum):
-    ALLOW = "allow"
-    PAUSE = "pause"
-
-class GateResult(Enum):
-    STOP = "stop"
-    HOLD = "hold"
-    ALLOW = "allow"
-
-class EvidenceResult(Enum):
-    SUFFICIENT = "sufficient"
-    INSUFFICIENT = "insufficient"
-
-class JudgmentOutcome(Enum):
-    STOP = "stop"
-    ALLOW = "allow"
-    INDETERMINATE = "indeterminate"
-```
-
-### Phase 2: Layer 4 + Layer 5 Implementation (1 week)
-- Judgment Outcome Layer logic
-- Accountability Layer (AJT Log)
-- External API endpoint (`/v1/events`)
-
-### Phase 3: Layer 2 + Layer 3 Implementation (1 week)
-- External Transmission Gate
-- Evidence collection
-- Gate → Judgment connection
-
-### Phase 4: Layer 1 Implementation (1 week)
-- Process control (rate limiting, queue)
-- Layer 1 → Layer 2 connection
-
----
-
-## Verification Checklist
-
-### Layer Separation Verification
-- [ ] Each layer only answers its own question
-- [ ] Hold used only in Layer 1, 2
-- [ ] Indeterminate generated only in Layer 4
-- [ ] External API exposes only Layer 4 language
-
-### Forbidden Items Verification
-- [ ] No prior usage (Evidence Layer)
-- [ ] No implicit Allow (Indeterminate handling)
-- [ ] No automatic retry (after Judgment)
-- [ ] No external Pause exposure
-
-### Log Verification
-- [ ] All Judgment Outcomes are logged
-- [ ] Allow is also logged
-- [ ] Log failure treated as operation failure
 
 ---
 
 ## Non-Normative Reference Materials
 
 - `BOUNDARY_GATE_MARKET_STRATEGY.md` — Market strategy (core principles)
-- `SYSTEM_SCENARIOS_FROM_REDDIT.md` — System scenarios based on Reddit cases
+- `SYSTEM_SCENARIOS_FROM_REDDIT.md` — System scenarios based on cases
 - `POC_EXECUTION_READY.md` — PoC execution package (API contracts)
 - `AJT_LAYER_ARCHITECTURE.md` (this document) — Layer structure sealing
 
